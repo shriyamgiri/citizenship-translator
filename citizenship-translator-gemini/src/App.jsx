@@ -12,6 +12,7 @@ export default function App() {
   const [editMode, setEditMode] = useState(false);
   const [birthAddressType, setBirthAddressType] = useState("Sub-Metropolitan");
   const [permAddressType, setPermAddressType] = useState("Sub-Metropolitan");
+  const [birthPlaceType, setBirthPlaceType] = useState("Sub-Metropolitan");
   const [savedResult, setSavedResult] = useState(null);
   const inputRef = useRef(null);
 
@@ -97,7 +98,7 @@ export default function App() {
   };
 
   const printPDF = () => {
-  const html = buildOutputHTML(result, birthAddressType, permAddressType);
+  const html = buildOutputHTML(result, birthPlaceType, birthAddressType, permAddressType);
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const w = window.open(url, "_blank");
@@ -272,6 +273,8 @@ export default function App() {
               setBirthAddressType={setBirthAddressType}
               permAddressType={permAddressType}
               setPermAddressType={setPermAddressType}
+              birthPlaceType={birthPlaceType}
+              setBirthPlaceType={setBirthPlaceType}
 />
           </div>
         )}
@@ -316,7 +319,7 @@ function AddressTypeDropdown({ value, onChange, editMode }) {
     </select>
   );
 }
-function OutputCard({ result, editMode, updateField, birthAddressType, setBirthAddressType, permAddressType, setPermAddressType }) {
+function OutputCard({ result, editMode, updateField, birthAddressType, setBirthAddressType, permAddressType, setPermAddressType, birthPlaceType, setBirthPlaceType }) {
   const fieldProps = { editMode, updateField };
   const ADDRESS_TYPES = ["Sub-Metropolitan", "Metropolitan", "V.D.C"];
 
@@ -393,7 +396,7 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
             leftValue={<>District: <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} /></>}
           />
           <TwoColRow
-            leftValue={<><AddressTypeDropdown value={birthAddressType} onChange={setBirthAddressType} editMode={editMode} /> <Field value={result.birth_place?.sub_metropolitan} path="birth_place.sub_metropolitan" {...fieldProps} /></>}
+            leftValue={<><AddressTypeDropdown value={birthPlaceType} onChange={setBirthPlaceType} editMode={editMode} /> <Field value={result.birth_place?.sub_metropolitan} path="birth_place.sub_metropolitan" {...fieldProps} /></>}
             rightLabel="Ward No."
             rightValue={<Field value={result.birth_place?.ward_no} path="birth_place.ward_no" mono {...fieldProps} />}
           />
@@ -487,7 +490,7 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
           </div>
           <div className="grid grid-cols-[160px_1fr_auto] items-baseline gap-3">
             <span></span>
-            <span>{birthAddressType}: <Field value={result.birth_place?.sub_metropolitan} path="birth_place.sub_metropolitan" {...fieldProps} /></span>
+            <span>{birthPlaceType}: <Field value={result.birth_place?.sub_metropolitan} path="birth_place.sub_metropolitan" {...fieldProps} /></span>
             <span>Ward No.<Field value={result.birth_place?.ward_no} path="birth_place.ward_no" mono {...fieldProps} /></span>
           </div>
           <div className="grid grid-cols-[160px_1fr_auto] items-baseline gap-3">
@@ -596,7 +599,7 @@ function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   );
 }
 
-function buildOutputHTML(r, birthAddrType = "Sub-Metropolitan", permAddrType = "Sub-Metropolitan") {
+function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrType = "Sub-Metropolitan", permAddrType = "Sub-Metropolitan") {
   const val = (v) => (v && v !== "" ? v : "—");
   const qrSvg = () => {
     const size = 21;
@@ -721,7 +724,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
   <div>
     <div class="row"><div class="l"><strong>Name and Surname:</strong> ${val(r.full_name)}</div><div class="r"><strong>Sex:</strong> ${val(r.sex)}</div></div>
     <div class="row"><div class="l"><strong>Place of birth:</strong> District: ${val(r.birth_place?.district)}</div><div class="r"></div></div>
-    <div class="row"><div class="l">${birthAddrType}: ${val(r.birth_place?.sub_metropolitan)}</div><div class="r"><strong>Ward No.:</strong> ${val(r.birth_place?.ward_no)}</div></div>
+    <div class="row"><div class="l">${birthPlaceAddrType}: ${val(r.birth_place?.sub_metropolitan)}</div><div class="r"><strong>Ward No.:</strong> ${val(r.birth_place?.ward_no)}</div></div>
     <div class="row"><div class="l"><strong>Permanent Resident:</strong> District: ${val(r.permanent_address?.district)}</div><div class="r"></div></div>
     <div class="row"><div class="l">${permAddrType}: ${val(r.permanent_address?.sub_metropolitan)}</div><div class="r"><strong>Ward No.:</strong> ${val(r.permanent_address?.ward_no)}</div></div>
     <div class="row"><div class="l"><strong>Date of birth (A.D.):</strong> Year: ${val(r.date_of_birth_ad?.year)} &nbsp; Month: ${val(r.date_of_birth_ad?.month)} &nbsp; Day: ${val(r.date_of_birth_ad?.day)}</div><div class="r"></div></div>
@@ -740,7 +743,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
   <div class="srow two-col"><strong>Full Name:</strong><span class="name">${val(r.full_name)}</span></div>
   <div class="srow two-col"><strong>Date of Birth (AD):</strong><span>Year: ${val(r.date_of_birth_ad?.year)} &nbsp; Month: ${val(r.date_of_birth_ad?.month)} &nbsp; Day: ${val(r.date_of_birth_ad?.day)}</span></div>
   <div class="srow"><strong>Birth Place:</strong><span>District: ${val(r.birth_place?.district)}</span><span></span></div>
-  <div class="srow"><span></span><span>${birthAddrType}: ${val(r.birth_place?.sub_metropolitan)}</span><span>Ward No.${val(r.birth_place?.ward_no)}</span></div>
+  <div class="srow"><span></span><span>${birthPlaceAddrType}: ${val(r.birth_place?.sub_metropolitan)}</span><span>Ward No.${val(r.birth_place?.ward_no)}</span></div>
   <div class="srow"><strong>Permanent Address:</strong><span>District: ${val(r.permanent_address?.district)}</span><span></span></div>
   <div class="srow"><span></span><span>${permAddrType}: ${val(r.permanent_address?.sub_metropolitan)}</span><span>Ward No. ${val(r.permanent_address?.ward_no)}</span></div>
 </div>
