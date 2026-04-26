@@ -56,7 +56,8 @@ export default function App() {
       formData.append("documentType", documentType);
       files.forEach((f) => formData.append("files", f));
 
-      const response = await fetch("/api/extract", {
+      const base = import.meta.env.VITE_API_URL || "";
+      const response = await fetch(`${base}/api/extract`, {
         method: "POST",
         body: formData,
       });
