@@ -1,5 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Download, RefreshCw, ChevronDown } from "lucide-react";
+import { auth, signInWithGoogle, logOut, getOrCreateUser, incrementPDFCount, incrementScanCount } from "./firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function App() {
   const [documentType, setDocumentType] = useState("Citizenship");
@@ -14,7 +16,79 @@ export default function App() {
   const [permAddressType, setPermAddressType] = useState("Sub-Metropolitan");
   const [birthPlaceType, setBirthPlaceType] = useState("Sub-Metropolitan");
   const [savedResult, setSavedResult] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const inputRef = useRef(null);
+  const [userProfile, setUserProfile] = useState(null);
+
+  // ✅ FIX 1: useEffect only sets state + returns cleanup. No JSX inside.
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const profile = await getOrCreateUser(firebaseUser);
+        setUser(firebaseUser);
+        setUserProfile(profile);
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // ✅ FIX 2: Auth checks are in the render, OUTSIDE useEffect
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-stone-400" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div
+        className="min-h-screen bg-stone-50 flex flex-col items-center justify-center gap-6 px-4"
+        style={{ fontFamily: "'Fraunces', Georgia, serif" }}
+      >
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
+        <div className="flex items-center gap-3 mb-2">
+          <div className="h-12 w-12 rounded-sm bg-red-700 flex items-center justify-center">
+            <FileText className="h-6 w-6 text-stone-50" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Document Translator</h1>
+            <p className="text-[11px] text-stone-500" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+              NEPALI → ENGLISH
+            </p>
+          </div>
+        </div>
+        <div className="w-full max-w-sm border-2 border-stone-900 bg-white p-8 rounded-sm text-center shadow-sm">
+          <h2 className="text-lg font-semibold text-stone-900 mb-1">Welcome</h2>
+          <p className="text-sm text-stone-500 mb-6">Sign in to access the translator</p>
+          <button
+            onClick={signInWithGoogle}
+            className="w-full flex items-center justify-center gap-3 border-2 border-stone-900 bg-stone-50 px-5 py-3 text-sm font-medium text-stone-900 hover:bg-stone-900 hover:text-stone-50 transition rounded-sm"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            Continue with Google
+          </button>
+          <p className="mt-4 text-[11px] text-stone-400">Free tier includes watermarked preview</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleFiles = (fileList) => {
     const valid = Array.from(fileList).filter(
@@ -51,16 +125,17 @@ export default function App() {
     }
     setStatus("processing");
     setErrorMsg("");
-
     try {
       const formData = new FormData();
       formData.append("documentType", documentType);
       files.forEach((f) => formData.append("files", f));
 
       const base = import.meta.env.VITE_API_URL || "";
+      const token = await auth.currentUser.getIdToken();
       const response = await fetch(`${base}/api/extract`, {
         method: "POST",
         body: formData,
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) {
@@ -71,6 +146,7 @@ export default function App() {
       const data = await response.json();
       setResult(data);
       setStatus("done");
+      await incrementScanCount(user.uid);
     } catch (err) {
       console.error(err);
       setErrorMsg(`Extraction failed: ${err.message}`);
@@ -97,39 +173,97 @@ export default function App() {
     });
   };
 
-  const printPDF = () => {
-  const html = buildOutputHTML(result, birthPlaceType, birthAddressType, permAddressType);
-  const blob = new Blob([html], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, "_blank");
-  w.onload = () => {
-    setTimeout(() => {
-      w.print();
-      URL.revokeObjectURL(url);
-    }, 400);
+  const printPDF = async () => {
+  // Block free users at limit
+    if (!userProfile?.plan === "premium" && userProfile?.pdfsGenerated >= userProfile?.pdfsLimit) {
+      setErrorMsg("You've reached your 5 PDF limit. Upgrade to premium for unlimited PDFs.");
+      return;
+    }
+
+    const html = buildOutputHTML(result, birthPlaceType, birthAddressType, permAddressType);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, "_blank");
+    w.onload = () => {
+      setTimeout(() => {
+        w.print();
+        URL.revokeObjectURL(url);
+      }, 400);
+    };
+
+    await incrementPDFCount(user.uid); // ← track PDF generation
+    setUserProfile(prev => ({ ...prev, pdfsGenerated: (prev.pdfsGenerated || 0) + 1 }));
   };
-};
+
+  // ── Main Render ───────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-stone-50" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet"
+      />
 
+      {/* ✅ FIX 3: Clean header — no duplicates, user info + logout on right */}
       <header className="border-b-2 border-stone-900 bg-stone-50 px-4 py-4 sm:px-10 sm:py-5">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
+          {/* Left: Logo + Title */}
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-sm bg-red-700 flex items-center justify-center">
               <FileText className="h-5 w-5 text-stone-50" strokeWidth={2.5} />
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-stone-900 sm:text-2xl">Document Translator</h1>
-              <p className="text-[10px] text-stone-600 sm:text-xs" style={{ fontFamily: "'JetBrains Mono', monospace" }}>NEPALI → ENGLISH</p>
+              <p className="text-[10px] text-stone-600 sm:text-xs" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                NEPALI → ENGLISH
+              </p>
             </div>
           </div>
-          {status === "done" && (
-            <button onClick={reset} className="flex items-center gap-2 rounded-sm border border-stone-900 bg-stone-50 px-3 py-2 text-xs font-medium text-stone-900 transition hover:bg-stone-900 hover:text-stone-50 sm:px-4 sm:text-sm">
-              <RefreshCw className="h-4 w-4" /> <span className="hidden sm:inline">New Translation</span><span className="sm:hidden">New</span>
+
+          {/* Right: User info + New Translation + Logout */}
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2">
+              {user.photoURL && (
+                <img src={user.photoURL} alt="" className="h-7 w-7 rounded-full border border-stone-300" />
+              )}
+              <span className="text-sm text-stone-700">{user.displayName?.split(" ")[0]}</span>
+              <span
+                className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                  userProfile?.plan === "premium"
+                    ? "bg-amber-400 text-stone-900"
+                    : "bg-stone-200 text-stone-600"
+                }`}
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                {userProfile?.plan === "premium" ? "PRO" : "Free"}
+              </span>
+
+              {userProfile?.plan !== "premium" && (
+                <span className="text-[10px] text-stone-500"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  {userProfile?.pdfsGenerated || 0}/{userProfile?.pdfsLimit || 5} PDFs
+                </span>
+              )}
+            </div>
+
+            {status === "done" && (
+              <button
+                onClick={reset}
+                className="flex items-center gap-2 rounded-sm border border-stone-900 bg-stone-50 px-3 py-2 text-xs font-medium text-stone-900 transition hover:bg-stone-900 hover:text-stone-50 sm:px-4 sm:text-sm"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline">New Translation</span>
+                <span className="sm:hidden">New</span>
+              </button>
+            )}
+
+            <button
+              onClick={logOut}
+              className="rounded-sm border border-stone-300 px-3 py-2 text-xs font-medium text-stone-600 hover:border-red-700 hover:text-red-700 transition"
+            >
+              Logout
             </button>
-          )}
+          </div>
         </div>
       </header>
 
@@ -137,7 +271,10 @@ export default function App() {
         {status !== "done" && (
           <>
             <section className="mb-6 sm:mb-8">
-              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+              <label
+                className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
                 Document Type
               </label>
               <div className="relative max-w-md">
@@ -162,7 +299,10 @@ export default function App() {
             </section>
 
             <section className="mb-6 sm:mb-8">
-              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+              <label
+                className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
                 Upload Document
               </label>
               <div
@@ -175,7 +315,14 @@ export default function App() {
                   dragActive ? "border-red-700 bg-red-50" : "border-stone-400 bg-white hover:border-stone-900 hover:bg-stone-100"
                 }`}
               >
-                <input ref={inputRef} type="file" accept="image/*,application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  onChange={(e) => handleFiles(e.target.files)}
+                  className="hidden"
+                />
                 <Upload className="mx-auto mb-3 h-8 w-8 text-stone-500 sm:h-10 sm:w-10" strokeWidth={1.5} />
                 <p className="text-sm font-medium text-stone-900 sm:text-base">
                   Tap to upload, or <span className="underline decoration-red-700 decoration-2 underline-offset-4">drag files</span>
@@ -187,12 +334,17 @@ export default function App() {
               {files.length > 0 && (
                 <div className="mt-4 space-y-2">
                   {files.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-sm border border-stone-300 bg-white px-3 py-2 sm:px-4 sm:py-2.5">
+                    <div
+                      key={i}
+                      className="flex items-center justify-between rounded-sm border border-stone-300 bg-white px-3 py-2 sm:px-4 sm:py-2.5"
+                    >
                       <div className="flex items-center gap-3 overflow-hidden">
                         <FileText className="h-4 w-4 flex-shrink-0 text-stone-600" />
                         <span className="truncate text-sm font-medium text-stone-900">{f.name}</span>
                       </div>
-                      <button onClick={() => removeFile(i)} className="ml-2 text-xs font-medium text-red-700 hover:underline">Remove</button>
+                      <button onClick={() => removeFile(i)} className="ml-2 text-xs font-medium text-red-700 hover:underline">
+                        Remove
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -222,7 +374,9 @@ export default function App() {
 
             {status === "processing" && (
               <div className="mt-6 rounded-sm border border-stone-300 bg-amber-50 px-5 py-4">
-                <p className="text-sm text-stone-800">Reading your document and translating Devanagari text. This usually takes 10–20 seconds.</p>
+                <p className="text-sm text-stone-800">
+                  Reading your document and translating Devanagari text. This usually takes 10–20 seconds.
+                </p>
               </div>
             )}
           </>
@@ -241,30 +395,31 @@ export default function App() {
               <div className="flex gap-2">
                 <button
                   onClick={() => {
-                    if (!editMode) {
-                      setSavedResult(JSON.parse(JSON.stringify(result))); // snapshot before editing
-                    }
+                    if (!editMode) setSavedResult(JSON.parse(JSON.stringify(result)));
                     setEditMode(!editMode);
                   }}
-                  className="rounded-sm border border-stone-900 bg-stone-50 px-4 py-2 text-sm font-medium text-stone-900 hover:bg-stone-100">
+                  className="rounded-sm border border-stone-900 bg-stone-50 px-4 py-2 text-sm font-medium text-stone-900 hover:bg-stone-100"
+                >
                   {editMode ? "Done Editing" : "Edit Fields"}
                 </button>
                 {editMode && (
                   <button
-                    onClick={() => {
-                      setResult(savedResult); // restore original
-                      setEditMode(false);
-                    }}
-                    className="rounded-sm border border-red-700 bg-stone-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-700 hover:text-stone-50">
+                    onClick={() => { setResult(savedResult); setEditMode(false); }}
+                    className="rounded-sm border border-red-700 bg-stone-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-700 hover:text-stone-50"
+                  >
                     Cancel Edit
                   </button>
                 )}
-                <button onClick={printPDF} className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-stone-900 px-4 py-2 text-sm font-medium text-stone-50 hover:bg-red-700 sm:flex-initial">
+                <button
+                  onClick={printPDF}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-stone-900 px-4 py-2 text-sm font-medium text-stone-50 hover:bg-red-700 sm:flex-initial"
+                >
                   <Download className="h-4 w-4" /> Save PDF
                 </button>
               </div>
             </div>
 
+            {/* ✅ FIX 4: Pass user as prop to OutputCard */}
             <OutputCard
               result={result}
               editMode={editMode}
@@ -275,7 +430,9 @@ export default function App() {
               setPermAddressType={setPermAddressType}
               birthPlaceType={birthPlaceType}
               setBirthPlaceType={setBirthPlaceType}
-/>
+              user={user}
+              userProfile={userProfile}
+            />
           </div>
         )}
       </main>
@@ -289,6 +446,41 @@ export default function App() {
   );
 }
 
+// ── Watermark ─────────────────────────────────────────────────────────────────
+
+function Watermark({ show }) {
+  if (!show) return null;
+  return (
+    <div style={{
+      position: "absolute", top: 0, left: 0,
+      width: "100%", height: "100%",
+      pointerEvents: "none", zIndex: 10,
+      overflow: "hidden",
+    }}>
+      {[...Array(14)].map((_, i) => (
+        <span key={i} style={{
+          position: "absolute",
+          top: `${i * 8 - 5}%`,
+          left: "-20%",
+          width: "140%",
+          textAlign: "center",
+          transform: "rotate(-35deg)",
+          fontSize: "20px",
+          fontWeight: "bold",
+          color: "rgba(180, 0, 0, 0.13)",
+          whiteSpace: "nowrap",
+          userSelect: "none",
+          letterSpacing: "6px",
+        }}>
+          DEMO VERSION • CitizenTranslate.com &nbsp;&nbsp;&nbsp; DEMO VERSION • CitizenTranslate.com
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Field & Address helpers ───────────────────────────────────────────────────
+
 function Field({ value, path, mono, editMode, updateField }) {
   if (editMode) {
     return (
@@ -301,10 +493,9 @@ function Field({ value, path, mono, editMode, updateField }) {
       />
     );
   }
-  return (
-    <span style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}>{value || "—"}</span>
-  );
+  return <span style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}>{value || "—"}</span>;
 }
+
 function AddressTypeDropdown({ value, onChange, editMode }) {
   if (!editMode) return <span>{value}:</span>;
   return (
@@ -319,15 +510,28 @@ function AddressTypeDropdown({ value, onChange, editMode }) {
     </select>
   );
 }
-function OutputCard({ result, editMode, updateField, birthAddressType, setBirthAddressType, permAddressType, setPermAddressType, birthPlaceType, setBirthPlaceType }) {
+
+// ── OutputCard ────────────────────────────────────────────────────────────────
+
+function OutputCard({
+  result, editMode, updateField,
+  birthAddressType, setBirthAddressType,
+  permAddressType, setPermAddressType,
+  birthPlaceType, setBirthPlaceType,
+  user, userProfile,  // ✅ received as prop now
+}) {
   const fieldProps = { editMode, updateField };
-  const ADDRESS_TYPES = ["Sub-Metropolitan", "Metropolitan", "V.D.C"];
 
   return (
-    <article className="rounded-sm border-2 border-stone-900 bg-white p-5 sm:p-10" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-      {/* TOP STRIP: S.N. block (left) | Title with centered Coat of Arms (center) | QR + Office Seal (right) */}
+    <article
+      className="rounded-sm border-2 border-stone-900 bg-white p-5 sm:p-10"
+      style={{ fontFamily: "'Fraunces', Georgia, serif", position: "relative" }}
+    >
+      {/* ✅ Watermark: show for free users (plan field will come later from DB) */}
+      <Watermark show={userProfile?.plan !== "premium"} />
+
+      {/* TOP STRIP */}
       <div className="mb-4 grid grid-cols-[auto_1fr_auto] items-start gap-4">
-        {/* Distributed-by / S.N. box (no coat of arms inside) */}
         <div className="w-44 border border-stone-800 text-[10px] leading-tight">
           <div className="border-b border-stone-800 px-2 py-1.5">
             <p className="font-semibold">Distributed by:</p>
@@ -339,7 +543,6 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
           </div>
         </div>
 
-        {/* Center Title: Coat of Arms on LEFT + Title lines on RIGHT, centered as a unit */}
         <div className="flex items-center justify-center gap-3 pt-1">
           <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-stone-500 text-[8px] italic leading-tight text-stone-600 text-center">
             Coat of<br />Arms of<br />Nepal
@@ -348,17 +551,15 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
             <p className="text-sm italic text-stone-600">Government of Nepal</p>
             <p className="text-sm italic text-stone-600">Ministry of Home Affairs</p>
             <h1 className="mt-1 text-lg font-bold tracking-tight text-stone-900 sm:text-xl">
-              District Administration Office, <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} />
+              District Administration Office,{" "}
+              <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} />
             </h1>
             <p className="mt-1 text-base font-semibold italic text-stone-900 underline">NEPALESE CITIZENSHIP CERTIFICATE</p>
           </div>
         </div>
 
-        {/* QR code (SVG pattern) + Office Seal stacked */}
         <div className="flex flex-col items-end gap-2">
-          <div className="h-20 w-20 border border-stone-800 p-1">
-            <RandomQR />
-          </div>
+          <div className="h-20 w-20 border border-stone-800 p-1"><RandomQR /></div>
           <div className="flex h-20 w-28 items-center justify-center border border-stone-800 text-[10px] italic text-stone-500">
             Office Seal
           </div>
@@ -371,19 +572,13 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
         <Field value={result.citizenship_certificate_no} path="citizenship_certificate_no" mono {...fieldProps} />
       </div>
 
-      {/* MAIN BODY: Photograph box (left) | Details (right) */}
+      {/* MAIN BODY */}
       <div className="grid grid-cols-[auto_1fr] gap-5">
-        {/* Unified Photograph + Sd. box — one box, two stacked labels */}
         <div className="flex h-44 w-32 flex-col items-center justify-center border border-stone-800 py-3 text-center">
-          <div className="text-[11px] italic text-stone-500">
-            Photograph
-          </div>
-          <div className="pt-2 text-xs font-semibold italic text-stone-500">
-            Sd.
-          </div>
+          <div className="text-[11px] italic text-stone-500">Photograph</div>
+          <div className="pt-2 text-xs font-semibold italic text-stone-500">Sd.</div>
         </div>
 
-        {/* Details column */}
         <div className="space-y-2 text-sm">
           <TwoColRow
             leftLabel="Name and Surname"
@@ -419,8 +614,6 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
               </>
             }
           />
-
-          {/* Family rows with C.C.No. and Citizenship Type on the right */}
           <TwoColRow
             leftLabel="Father's Name, Surname"
             leftValue={<Field value={result.father_name} path="father_name" {...fieldProps} />}
@@ -460,14 +653,16 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
         </div>
       </div>
 
-      {/* English Summary Box — "Government of Nepal has issued this Citizenship Certificate with following details" */}
+      {/* Summary Box */}
       <div className="mt-5 border border-stone-800 p-4 text-sm">
         <p className="mb-2 font-semibold">Government of Nepal has issued this Citizenship Certificate with following details:</p>
         <div className="space-y-1.5">
           <div className="flex items-baseline gap-3 flex-wrap">
             <span className="font-semibold whitespace-nowrap">Citizenship Certificate No.:</span>
             <Field value={result.citizenship_certificate_no} path="citizenship_certificate_no" mono {...fieldProps} />
-            <span className="ml-auto whitespace-nowrap"><span className="font-semibold">Sex:</span> <Field value={result.sex} path="sex" {...fieldProps} /></span>
+            <span className="ml-auto whitespace-nowrap">
+              <span className="font-semibold">Sex:</span> <Field value={result.sex} path="sex" {...fieldProps} />
+            </span>
           </div>
           <div className="grid grid-cols-[160px_1fr] items-baseline gap-3">
             <span className="font-semibold">Full Name:</span>
@@ -491,7 +686,7 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
           <div className="grid grid-cols-[160px_1fr_auto] items-baseline gap-3">
             <span></span>
             <span>{birthPlaceType}: <Field value={result.birth_place?.sub_metropolitan} path="birth_place.sub_metropolitan" {...fieldProps} /></span>
-            <span>Ward No.<Field value={result.birth_place?.ward_no} path="birth_place.ward_no" mono {...fieldProps} /></span>
+            <span>Ward No. <Field value={result.birth_place?.ward_no} path="birth_place.ward_no" mono {...fieldProps} /></span>
           </div>
           <div className="grid grid-cols-[160px_1fr_auto] items-baseline gap-3">
             <span className="font-semibold">Permanent Address:</span>
@@ -506,14 +701,14 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
         </div>
       </div>
 
-      {/* Attestation block */}
+      {/* Attestation */}
       <div className="mt-6 border-t border-stone-400 pt-4 text-sm">
         <p className="italic">This certificate of Nepalese Citizenship is hereby issued pursuant to the Nepal Citizenship Act 2063 B.S. (2006 A.D.)</p>
         <p className="mt-2"><span className="font-semibold">Type of citizenship: </span><Field value={result.citizenship_type} path="citizenship_type" {...fieldProps} /></p>
         <p className="mt-1"><span className="font-semibold">Certificate Receiver's signature: </span><span className="italic text-stone-500">Sd.</span></p>
       </div>
 
-      {/* Bottom: Thumb Impression box (far left) | Issuing Authority (right side) */}
+      {/* Bottom */}
       <div className="mt-6 flex flex-col gap-6 border-t border-stone-400 pt-5 text-sm sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-shrink-0">
           <div className="inline-block border border-stone-800 text-center text-xs">
@@ -535,7 +730,6 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
         </div>
       </div>
 
-      {/* Footer note */}
       <div className="mt-6 border-t border-stone-400 pt-4 text-center text-xs italic text-stone-600">
         If found, please submit this certificate to the nearest District Administration Office or Police Office.
       </div>
@@ -543,16 +737,12 @@ function OutputCard({ result, editMode, updateField, birthAddressType, setBirthA
   );
 }
 
+// ── RandomQR ──────────────────────────────────────────────────────────────────
+
 function RandomQR() {
-  // Deterministic pseudo-random QR-like pattern using a fixed seed so it doesn't
-  // flicker between renders. Produces a decorative placeholder, not a scannable code.
   const size = 21;
   const seed = 1337;
-  const rng = (i) => {
-    const x = Math.sin(seed + i) * 10000;
-    return x - Math.floor(x);
-  };
-
+  const rng = (i) => { const x = Math.sin(seed + i) * 10000; return x - Math.floor(x); };
   const cells = [];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -562,12 +752,9 @@ function RandomQR() {
       const inFinder = inTL || inTR || inBL;
       let filled;
       if (inFinder) {
-        // Draw 7x7 finder pattern: outer ring + inner 3x3 block
         const fx = inTL ? x : inTR ? x - (size - 7) : x;
         const fy = inTL ? y : inBL ? y - (size - 7) : y;
-        const onBorder = fx === 0 || fx === 6 || fy === 0 || fy === 6;
-        const inCenter = fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4;
-        filled = onBorder || inCenter;
+        filled = (fx === 0 || fx === 6 || fy === 0 || fy === 6) || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
       } else {
         filled = rng(y * size + x) > 0.5;
       }
@@ -581,6 +768,8 @@ function RandomQR() {
     </svg>
   );
 }
+
+// ── TwoColRow ─────────────────────────────────────────────────────────────────
 
 function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   return (
@@ -599,41 +788,35 @@ function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   );
 }
 
+// ── buildOutputHTML ───────────────────────────────────────────────────────────
+
 function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrType = "Sub-Metropolitan", permAddrType = "Sub-Metropolitan") {
   const val = (v) => (v && v !== "" ? v : "—");
   const qrSvg = () => {
-    const size = 21;
-    const seed = 1337;
+    const size = 21; const seed = 1337;
     const rng = (i) => { const x = Math.sin(seed + i) * 10000; return x - Math.floor(x); };
     let rects = "";
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const inTL = x < 7 && y < 7;
-        const inTR = x >= size - 7 && y < 7;
-        const inBL = x < 7 && y >= size - 7;
+        const inTL = x < 7 && y < 7, inTR = x >= size - 7 && y < 7, inBL = x < 7 && y >= size - 7;
         const inFinder = inTL || inTR || inBL;
         let filled;
         if (inFinder) {
           const fx = inTL ? x : inTR ? x - (size - 7) : x;
           const fy = inTL ? y : inBL ? y - (size - 7) : y;
-          const onBorder = fx === 0 || fx === 6 || fy === 0 || fy === 6;
-          const inCenter = fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4;
-          filled = onBorder || inCenter;
-        } else {
-          filled = rng(y * size + x) > 0.5;
-        }
+          filled = (fx === 0 || fx === 6 || fy === 0 || fy === 6) || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
+        } else { filled = rng(y * size + x) > 0.5; }
         if (filled) rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
       }
     }
     return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="white"/><g fill="#111">${rects}</g></svg>`;
   };
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Citizenship Translation — ${val(r.citizenship_certificate_no)}</title>
 <style>
 @page { size: A4; margin: 10mm; }
 * { box-sizing: border-box; }
 body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820px; margin: 0 auto; padding: 20px; font-size: 12px; line-height: 1.35; }
-
-/* Top strip */
 .top-strip { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; margin-bottom: 12px; }
 .sn-box { border: 1px solid #111; width: 170px; font-size: 10px; }
 .sn-box .dist { border-bottom: 1px solid #111; padding: 5px 6px; }
@@ -641,7 +824,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .sn-box .sn { display: flex; justify-content: space-between; padding: 8px 6px; font-weight: 600; }
 .title { display: flex; align-items: center; justify-content: center; gap: 10px; padding-top: 4px; }
 .title .arms-circle { width: 44px; height: 44px; border: 1px solid #888; border-radius: 50%; line-height: 1.1; font-size: 8px; font-style: italic; color: #666; display: flex; align-items: center; justify-content: center; text-align: center; flex-shrink: 0; }
-.title .title-text { text-align: center; min-width: 0;}
+.title .title-text { text-align: center; min-width: 0; }
 .title p.gov { margin: 0; font-style: italic; color: #555; font-size: 12px; }
 .title h1 { margin: 4px 0 2px; font-size: 16px; }
 .title .ct { font-weight: 600; font-style: italic; font-size: 14px; text-decoration: underline; margin: 4px 0 0; }
@@ -649,28 +832,20 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .qr-box { border: 1px solid #111; width: 80px; height: 80px; padding: 3px; margin-left: auto; margin-bottom: 6px; }
 .qr-box svg { width: 100%; height: 100%; display: block; }
 .right-stack { display: flex; flex-direction: column; align-items: flex-end; }
-
 .cert-no-line { margin: 10px 0 14px; font-size: 12px; }
 .cert-no { font-family: 'Times New Roman', monospace; font-weight: 600; }
-
-/* Main body */
 .body-grid { display: grid; grid-template-columns: 130px 1fr; gap: 16px; }
 .photo-box { border: 1px solid #111; height: 176px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 0; text-align: center; }
 .photo-box .ph { font-style: italic; color: #888; font-size: 11px; }
 .photo-box .sd { padding-top: 8px; font-style: italic; font-weight: 600; color: #888; font-size: 11px; }
-
 .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; border-bottom: 1px dotted #bbb; padding: 4px 0; align-items: baseline; }
-.row .l { }
 .row .l strong { font-weight: 600; }
 .row .r { text-align: right; font-size: 11px; color: #444; }
 .row .r strong { font-weight: 600; }
-
 .section { margin-top: 8px; border-top: 1px solid #888; padding-top: 6px; }
 .section p { margin: 2.5px 0; }
 .italic { font-style: italic; }
 .muted { color: #888; }
-
-/* Bottom: Thumb (left) — Authority (right half) */
 .bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-top: 14px; border-top: 1px solid #888; padding-top: 12px; }
 .thumb { border: 1px solid #111; display: inline-block; font-size: 11px; text-align: center; flex-shrink: 0; }
 .thumb .hdr { border-bottom: 1px solid #111; padding: 4px 12px; font-weight: 600; }
@@ -682,10 +857,9 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .auth { width: 50%; padding-right: 16px; }
 .auth p { margin: 3px 0; }
 .auth .underline { text-decoration: underline; font-style: italic; }
-
-.footer-note { margin-top: 8px; padding-top: 6px; border-top: 1px solid #bbb; text-align: center; font-style: italic; color: #666; font-size: 11px; page-break-inside: avoid; page-break-before: avoid; }
-
-/* English Summary Box */
+.footer-note { margin-top: 8px; padding-top: 6px; border-top: 1px solid #bbb; text-align: center; font-style: italic; color: #666; font-size: 11px; page-break-inside: avoid; }
+.watermark-wrap { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden; }
+.watermark-line { position: absolute; left: -10%; width: 120%; text-align: center; transform: rotate(-35deg); font-size: 22px; font-weight: bold; color: rgba(180,0,0,0.11); white-space: nowrap; letter-spacing: 6px; font-family: 'Times New Roman', serif; }
 .summary-box { border: 1px solid #111; padding: 10px 14px; margin-top: 14px; font-size: 12px; }
 .summary-box .title-line { font-weight: 600; margin-bottom: 8px; }
 .summary-box .srow { display: grid; grid-template-columns: 160px 1fr auto; gap: 10px; padding: 2px 0; align-items: baseline; }
@@ -693,6 +867,12 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .summary-box .srow strong { font-weight: 600; }
 .summary-box .name { font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 </style></head><body>
+
+<div class="watermark-wrap">
+  ${[0, 13, 26, 39, 52, 65, 78, 91].map(top =>
+    `<div class="watermark-line" style="top:${top}%">DEMO VERSION &bull; CitizenTranslate.com &nbsp;&nbsp;&nbsp; DEMO VERSION &bull; CitizenTranslate.com</div>`
+  ).join("")}
+</div>
 
 <div class="top-strip">
   <div class="sn-box">
@@ -717,10 +897,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 <div class="cert-no-line"><strong>Citizenship Certificate No.:</strong> <span class="cert-no">${val(r.citizenship_certificate_no)}</span></div>
 
 <div class="body-grid">
-  <div class="photo-box">
-    <div class="ph">Photograph</div>
-    <div class="sd">Sd.</div>
-  </div>
+  <div class="photo-box"><div class="ph">Photograph</div><div class="sd">Sd.</div></div>
   <div>
     <div class="row"><div class="l"><strong>Name and Surname:</strong> ${val(r.full_name)}</div><div class="r"><strong>Sex:</strong> ${val(r.sex)}</div></div>
     <div class="row"><div class="l"><strong>Place of birth:</strong> District: ${val(r.birth_place?.district)}</div><div class="r"></div></div>
@@ -739,11 +916,11 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 
 <div class="summary-box">
   <p class="title-line">Government of Nepal has issued this Citizenship Certificate with following details:</p>
-  <div class="srow" style="display:flex; align-items:baseline; gap:8px;"><strong style="white-space:nowrap;">Citizenship Certificate No.:</strong><span class="cert-no">${val(r.citizenship_certificate_no)}</span><span style="margin-left:auto; white-space:nowrap;"><strong>Sex:</strong> ${val(r.sex)}</span></div>
+  <div class="srow" style="display:flex;align-items:baseline;gap:8px;"><strong style="white-space:nowrap;">Citizenship Certificate No.:</strong><span class="cert-no">${val(r.citizenship_certificate_no)}</span><span style="margin-left:auto;white-space:nowrap;"><strong>Sex:</strong> ${val(r.sex)}</span></div>
   <div class="srow two-col"><strong>Full Name:</strong><span class="name">${val(r.full_name)}</span></div>
   <div class="srow two-col"><strong>Date of Birth (AD):</strong><span>Year: ${val(r.date_of_birth_ad?.year)} &nbsp; Month: ${val(r.date_of_birth_ad?.month)} &nbsp; Day: ${val(r.date_of_birth_ad?.day)}</span></div>
   <div class="srow"><strong>Birth Place:</strong><span>District: ${val(r.birth_place?.district)}</span><span></span></div>
-  <div class="srow"><span></span><span>${birthPlaceAddrType}: ${val(r.birth_place?.sub_metropolitan)}</span><span>Ward No.${val(r.birth_place?.ward_no)}</span></div>
+  <div class="srow"><span></span><span>${birthPlaceAddrType}: ${val(r.birth_place?.sub_metropolitan)}</span><span>Ward No. ${val(r.birth_place?.ward_no)}</span></div>
   <div class="srow"><strong>Permanent Address:</strong><span>District: ${val(r.permanent_address?.district)}</span><span></span></div>
   <div class="srow"><span></span><span>${permAddrType}: ${val(r.permanent_address?.sub_metropolitan)}</span><span>Ward No. ${val(r.permanent_address?.ward_no)}</span></div>
 </div>
@@ -758,10 +935,8 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
   <div class="thumb">
     <div class="hdr">Thumb Impression</div>
     <div class="cells">
-      <div class="col-hdr">Right</div>
-      <div class="col-hdr">Left</div>
-      <div class="imp">Impressed</div>
-      <div class="imp">Impressed</div>
+      <div class="col-hdr">Right</div><div class="col-hdr">Left</div>
+      <div class="imp">Impressed</div><div class="imp">Impressed</div>
     </div>
   </div>
   <div class="auth">
