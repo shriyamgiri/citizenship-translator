@@ -3,6 +3,61 @@ import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Download, Refresh
 import { auth, signInWithGoogle, logOut, getOrCreateUser, incrementPDFCount, incrementScanCount } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
+// ─── Progress Bar Component ───────────────────────────────────────────────────
+function ProgressBar({ used, limit }) {
+  const percentage = Math.min((used / limit) * 100, 100);
+  const color = percentage < 60 ? "bg-green-600" 
+              : percentage < 80 ? "bg-yellow-500" 
+              : "bg-red-600";
+  
+  return (
+    <div className="w-24 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+      <div 
+        className={`h-full ${color} transition-all duration-500`} 
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+}
+
+// ─── Logout Confirmation Modal ────────────────────────────────────────────────
+function LogoutModal({ show, onCancel, onConfirm }) {
+  if (!show) return null;
+  
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4"
+      onClick={onCancel}
+    >
+      <div 
+        className="w-full max-w-sm rounded-sm border-2 border-stone-900 bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        style={{ fontFamily: "'Fraunces', Georgia, serif" }}
+      >
+        <h3 className="mb-2 text-lg font-semibold text-stone-900">Sign Out?</h3>
+        <p className="mb-6 text-sm text-stone-600">
+          You will need to sign in again to access your translations.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 rounded-sm border border-stone-300 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 rounded-sm border border-red-700 bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [documentType, setDocumentType] = useState("Citizenship");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -18,10 +73,10 @@ export default function App() {
   const [savedResult, setSavedResult] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const inputRef = useRef(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const inputRef = useRef(null);
 
-  // ✅ FIX 1: useEffect only sets state + returns cleanup. No JSX inside.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -37,7 +92,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ✅ FIX 2: Auth checks are in the render, OUTSIDE useEffect
   if (authLoading) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
@@ -82,13 +136,11 @@ export default function App() {
             </svg>
             Continue with Google
           </button>
-          <p className="mt-4 text-[11px] text-stone-400">Free tier includes watermarked preview</p>
+          <p className="mt-4 text-[11px] text-stone-400">Free tier includes 5 watermarked PDFs</p>
         </div>
       </div>
     );
   }
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleFiles = (fileList) => {
     const valid = Array.from(fileList).filter(
@@ -174,13 +226,12 @@ export default function App() {
   };
 
   const printPDF = async () => {
-  // Block free users at limit
-    if (!userProfile?.plan === "premium" && userProfile?.pdfsGenerated >= userProfile?.pdfsLimit) {
-      setErrorMsg("You've reached your 5 PDF limit. Upgrade to premium for unlimited PDFs.");
+    if (userProfile?.plan !== "premium" && userProfile?.pdfsGenerated >= userProfile?.pdfsLimit) {
+      setErrorMsg("You've reached your 5 PDF limit. Upgrade to premium for 25 clean PDFs/month.");
       return;
     }
 
-    const html = buildOutputHTML(result, birthPlaceType, birthAddressType, permAddressType);
+    const html = buildOutputHTML(result, birthPlaceType, birthAddressType, permAddressType, userProfile?.plan);
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const w = window.open(url, "_blank");
@@ -191,11 +242,9 @@ export default function App() {
       }, 400);
     };
 
-    await incrementPDFCount(user.uid); // ← track PDF generation
+    await incrementPDFCount(user.uid);
     setUserProfile(prev => ({ ...prev, pdfsGenerated: (prev.pdfsGenerated || 0) + 1 }));
   };
-
-  // ── Main Render ───────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-stone-50" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
@@ -204,10 +253,8 @@ export default function App() {
         rel="stylesheet"
       />
 
-      {/* ✅ FIX 3: Clean header — no duplicates, user info + logout on right */}
       <header className="border-b-2 border-stone-900 bg-stone-50 px-4 py-4 sm:px-10 sm:py-5">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
-          {/* Left: Logo + Title */}
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-sm bg-red-700 flex items-center justify-center">
               <FileText className="h-5 w-5 text-stone-50" strokeWidth={2.5} />
@@ -220,9 +267,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right: User info + New Translation + Logout */}
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-3">
               {user.photoURL && (
                 <img src={user.photoURL} alt="" className="h-7 w-7 rounded-full border border-stone-300" />
               )}
@@ -235,14 +281,17 @@ export default function App() {
                 }`}
                 style={{ fontFamily: "'JetBrains Mono', monospace" }}
               >
-                {userProfile?.plan === "premium" ? "PRO" : "Free"}
+                {userProfile?.plan === "premium" ? "PRO" : "FREE"}
               </span>
 
               {userProfile?.plan !== "premium" && (
-                <span className="text-[10px] text-stone-500"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                  {userProfile?.pdfsGenerated || 0}/{userProfile?.pdfsLimit || 5} PDFs
-                </span>
+                <div className="flex items-center gap-2">
+                  <ProgressBar used={userProfile?.pdfsGenerated || 0} limit={userProfile?.pdfsLimit || 5} />
+                  <span className="text-[10px] text-stone-500 whitespace-nowrap"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    {userProfile?.pdfsGenerated || 0}/{userProfile?.pdfsLimit || 5}
+                  </span>
+                </div>
               )}
             </div>
 
@@ -258,7 +307,7 @@ export default function App() {
             )}
 
             <button
-              onClick={logOut}
+              onClick={() => setShowLogoutModal(true)}
               className="rounded-sm border border-stone-300 px-3 py-2 text-xs font-medium text-stone-600 hover:border-red-700 hover:text-red-700 transition"
             >
               Logout
@@ -419,7 +468,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* ✅ FIX 4: Pass user as prop to OutputCard */}
             <OutputCard
               result={result}
               editMode={editMode}
@@ -430,24 +478,55 @@ export default function App() {
               setPermAddressType={setPermAddressType}
               birthPlaceType={birthPlaceType}
               setBirthPlaceType={setBirthPlaceType}
-              user={user}
               userProfile={userProfile}
             />
           </div>
         )}
       </main>
 
-      <footer className="border-t border-stone-300 px-4 py-6 text-center sm:px-10">
-        <p className="text-[11px] text-stone-600" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-          Translation is machine-generated. Always verify before notarization.
-        </p>
+      <footer className="border-t border-stone-300 px-4 py-6 sm:px-10">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-3 flex flex-wrap items-center justify-center gap-4 text-xs text-stone-500">
+            <div className="flex items-center gap-1.5">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              <span>SSL Secured</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <span>Data Protected</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
+              <span>Files Auto-Deleted</span>
+            </div>
+          </div>
+          <p className="text-center text-[11px] text-stone-600" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            Translation is machine-generated. Always verify before notarization.
+          </p>
+        </div>
       </footer>
+
+      <LogoutModal 
+        show={showLogoutModal}
+        onCancel={() => setShowLogoutModal(false)}
+        onConfirm={() => {
+          setShowLogoutModal(false);
+          logOut();
+        }}
+      />
     </div>
   );
 }
 
-// ── Watermark ─────────────────────────────────────────────────────────────────
-
+// ─── Watermark Component ──────────────────────────────────────────────────────
 function Watermark({ show }) {
   if (!show) return null;
   return (
@@ -479,8 +558,7 @@ function Watermark({ show }) {
   );
 }
 
-// ── Field & Address helpers ───────────────────────────────────────────────────
-
+// ─── Field Component ──────────────────────────────────────────────────────────
 function Field({ value, path, mono, editMode, updateField }) {
   if (editMode) {
     return (
@@ -496,6 +574,7 @@ function Field({ value, path, mono, editMode, updateField }) {
   return <span style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}>{value || "—"}</span>;
 }
 
+// ─── Address Type Dropdown ────────────────────────────────────────────────────
 function AddressTypeDropdown({ value, onChange, editMode }) {
   if (!editMode) return <span>{value}:</span>;
   return (
@@ -511,14 +590,13 @@ function AddressTypeDropdown({ value, onChange, editMode }) {
   );
 }
 
-// ── OutputCard ────────────────────────────────────────────────────────────────
-
+// ─── OutputCard ───────────────────────────────────────────────────────────────
 function OutputCard({
   result, editMode, updateField,
   birthAddressType, setBirthAddressType,
   permAddressType, setPermAddressType,
   birthPlaceType, setBirthPlaceType,
-  user, userProfile,  // ✅ received as prop now
+  userProfile,
 }) {
   const fieldProps = { editMode, updateField };
 
@@ -527,10 +605,8 @@ function OutputCard({
       className="rounded-sm border-2 border-stone-900 bg-white p-5 sm:p-10"
       style={{ fontFamily: "'Fraunces', Georgia, serif", position: "relative" }}
     >
-      {/* ✅ Watermark: show for free users (plan field will come later from DB) */}
       <Watermark show={userProfile?.plan !== "premium"} />
 
-      {/* TOP STRIP */}
       <div className="mb-4 grid grid-cols-[auto_1fr_auto] items-start gap-4">
         <div className="w-44 border border-stone-800 text-[10px] leading-tight">
           <div className="border-b border-stone-800 px-2 py-1.5">
@@ -566,15 +642,13 @@ function OutputCard({
         </div>
       </div>
 
-      {/* Certificate No */}
       <div className="mb-4 text-sm">
         <span className="font-semibold">Citizenship Certificate No.: </span>
         <Field value={result.citizenship_certificate_no} path="citizenship_certificate_no" mono {...fieldProps} />
       </div>
 
-      {/* MAIN BODY */}
       <div className="grid grid-cols-[auto_1fr] gap-5">
-        <div className="flex h-44 w-32 flex-col items-center justify-center border border-stone-800 py-3 text-center">
+        <div className="flex h-44 w-32 flex-col items-center justify-center self-start border border-stone-800 py-3 text-center">
           <div className="text-[11px] italic text-stone-500">Photograph</div>
           <div className="pt-2 text-xs font-semibold italic text-stone-500">Sd.</div>
         </div>
@@ -653,7 +727,6 @@ function OutputCard({
         </div>
       </div>
 
-      {/* Summary Box */}
       <div className="mt-5 border border-stone-800 p-4 text-sm">
         <p className="mb-2 font-semibold">Government of Nepal has issued this Citizenship Certificate with following details:</p>
         <div className="space-y-1.5">
@@ -701,14 +774,12 @@ function OutputCard({
         </div>
       </div>
 
-      {/* Attestation */}
       <div className="mt-6 border-t border-stone-400 pt-4 text-sm">
         <p className="italic">This certificate of Nepalese Citizenship is hereby issued pursuant to the Nepal Citizenship Act 2063 B.S. (2006 A.D.)</p>
         <p className="mt-2"><span className="font-semibold">Type of citizenship: </span><Field value={result.citizenship_type} path="citizenship_type" {...fieldProps} /></p>
         <p className="mt-1"><span className="font-semibold">Certificate Receiver's signature: </span><span className="italic text-stone-500">Sd.</span></p>
       </div>
 
-      {/* Bottom */}
       <div className="mt-6 flex flex-col gap-6 border-t border-stone-400 pt-5 text-sm sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-shrink-0">
           <div className="inline-block border border-stone-800 text-center text-xs">
@@ -737,8 +808,7 @@ function OutputCard({
   );
 }
 
-// ── RandomQR ──────────────────────────────────────────────────────────────────
-
+// ─── RandomQR ─────────────────────────────────────────────────────────────────
 function RandomQR() {
   const size = 21;
   const seed = 1337;
@@ -769,8 +839,7 @@ function RandomQR() {
   );
 }
 
-// ── TwoColRow ─────────────────────────────────────────────────────────────────
-
+// ─── TwoColRow ────────────────────────────────────────────────────────────────
 function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   return (
     <div className="grid grid-cols-[1fr_auto] items-baseline gap-4 border-b border-dotted border-stone-300 pb-1.5">
@@ -788,9 +857,8 @@ function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   );
 }
 
-// ── buildOutputHTML ───────────────────────────────────────────────────────────
-
-function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrType = "Sub-Metropolitan", permAddrType = "Sub-Metropolitan") {
+// ─── buildOutputHTML ──────────────────────────────────────────────────────────
+function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrType = "Sub-Metropolitan", permAddrType = "Sub-Metropolitan", userPlan = "free") {
   const val = (v) => (v && v !== "" ? v : "—");
   const qrSvg = () => {
     const size = 21; const seed = 1337;
@@ -812,6 +880,14 @@ function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrTy
     return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="white"/><g fill="#111">${rects}</g></svg>`;
   };
 
+  // Watermark HTML (conditional based on plan)
+  const watermarkHTML = userPlan !== "premium" ? `
+<div class="watermark-wrap">
+  ${[0, 13, 26, 39, 52, 65, 78, 91].map(top =>
+    `<div class="watermark-line" style="top:${top}%">DEMO VERSION &bull; CitizenTranslate.com &nbsp;&nbsp;&nbsp; DEMO VERSION &bull; CitizenTranslate.com</div>`
+  ).join("")}
+</div>` : '';
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Citizenship Translation — ${val(r.citizenship_certificate_no)}</title>
 <style>
 @page { size: A4; margin: 10mm; }
@@ -823,17 +899,17 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .sn-box .dist strong { display: block; }
 .sn-box .sn { display: flex; justify-content: space-between; padding: 8px 6px; font-weight: 600; }
 .title { display: flex; align-items: center; justify-content: center; gap: 10px; padding-top: 4px; }
-.title .arms-circle { width: 44px; height: 44px; border: 1px solid #888; border-radius: 50%; line-height: 1.1; font-size: 8px; font-style: italic; color: #666; display: flex; align-items: center; justify-content: center; text-align: center; flex-shrink: 0; }
+.title .arms-circle { width: 44px; height: 44px; border: 1px solid #888; border-radius: 50%; font-size: 7px; font-style: italic; color: #666; display: flex; align-items: center; justify-content: center; text-align: center; flex-shrink: 0; line-height: 1.2; }
 .title .title-text { text-align: center; min-width: 0; }
 .title p.gov { margin: 0; font-style: italic; color: #555; font-size: 12px; }
-.title h1 { margin: 4px 0 2px; font-size: 16px; }
-.title .ct { font-weight: 600; font-style: italic; font-size: 14px; text-decoration: underline; margin: 4px 0 0; }
+.title .dao { margin: 3px 0 2px; font-size: 15px; font-weight: 700; }
+.title .ct { font-weight: 600; font-style: italic; font-size: 13px; text-decoration: underline; margin: 3px 0 0; }
 .seal-box { border: 1px solid #111; width: 110px; height: 80px; display: flex; align-items: center; justify-content: center; font-style: italic; font-size: 10px; color: #888; }
 .qr-box { border: 1px solid #111; width: 80px; height: 80px; padding: 3px; margin-left: auto; margin-bottom: 6px; }
 .qr-box svg { width: 100%; height: 100%; display: block; }
 .right-stack { display: flex; flex-direction: column; align-items: flex-end; }
 .cert-no-line { margin: 10px 0 14px; font-size: 12px; }
-.cert-no { font-family: 'Times New Roman', monospace; font-weight: 600; }
+.cert-no { font-family: 'Times New Roman', Times, serif; font-weight: 600; }
 .body-grid { display: grid; grid-template-columns: 130px 1fr; gap: 16px; }
 .photo-box { border: 1px solid #111; height: 176px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 0; text-align: center; }
 .photo-box .ph { font-style: italic; color: #888; font-size: 11px; }
@@ -857,7 +933,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .auth { width: 50%; padding-right: 16px; }
 .auth p { margin: 3px 0; }
 .auth .underline { text-decoration: underline; font-style: italic; }
-.footer-note { margin-top: 8px; padding-top: 6px; border-top: 1px solid #bbb; text-align: center; font-style: italic; color: #666; font-size: 11px; page-break-inside: avoid; }
+.footer-note { margin-top: 8px; padding-top: 6px; border-top: 1px solid #bbb; text-align: center; font-style: italic; color: #666; font-size: 11px; page-break-inside: avoid; page-break-before: avoid; }
 .watermark-wrap { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden; }
 .watermark-line { position: absolute; left: -10%; width: 120%; text-align: center; transform: rotate(-35deg); font-size: 22px; font-weight: bold; color: rgba(180,0,0,0.11); white-space: nowrap; letter-spacing: 6px; font-family: 'Times New Roman', serif; }
 .summary-box { border: 1px solid #111; padding: 10px 14px; margin-top: 14px; font-size: 12px; }
@@ -868,11 +944,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .summary-box .name { font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
 </style></head><body>
 
-<div class="watermark-wrap">
-  ${[0, 13, 26, 39, 52, 65, 78, 91].map(top =>
-    `<div class="watermark-line" style="top:${top}%">DEMO VERSION &bull; CitizenTranslate.com &nbsp;&nbsp;&nbsp; DEMO VERSION &bull; CitizenTranslate.com</div>`
-  ).join("")}
-</div>
+${watermarkHTML}
 
 <div class="top-strip">
   <div class="sn-box">
@@ -883,8 +955,7 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
     <div class="arms-circle">Coat of<br/>Arms of<br/>Nepal</div>
     <div class="title-text">
       <p class="gov">Government of Nepal</p>
-      <p class="gov">Ministry of Home Affairs</p>
-      <h1>District Administration Office, ${val(r.birth_place?.district)}</h1>
+      <p class="gov">Ministry of Home Affairs &nbsp;&nbsp; District Administration Office, ${val(r.birth_place?.district)}</p>
       <p class="ct">NEPALESE CITIZENSHIP CERTIFICATE</p>
     </div>
   </div>
