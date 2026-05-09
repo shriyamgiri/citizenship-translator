@@ -1,17 +1,44 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Download, RefreshCw, ChevronDown } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Download, RefreshCw, ChevronDown, Camera, Star, Zap, X, Mail } from "lucide-react";
 import { auth, signInWithGoogle, logOut, getOrCreateUser, incrementPDFCount, incrementScanCount } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
-// ─── Progress Bar Component ───────────────────────────────────────────────────
-function ProgressBar({ used, limit }) {
+// ─── DEMO DATA ────────────────────────────────────────────────────────────────
+const DEMO_RESULT = {
+  serial_no: "6537145",
+  citizenship_certificate_no: "17-01-80-06971",
+  full_name: "Demo User (Sample)",
+  sex: "Male",
+  date_of_birth_ad: { year: "1990", month: "JAN", day: "15" },
+  birth_place: { district: "Kathmandu", sub_metropolitan: "Kathmandu", ward_no: "5" },
+  permanent_address: { district: "Kathmandu", sub_metropolitan: "Kathmandu", ward_no: "5" },
+  father_name: "Sample Father Name",
+  father_address: "Kathmandu-5",
+  father_cc_no: "",
+  father_citizenship_type: "",
+  mother_name: "Sample Mother Name",
+  mother_address: "Kathmandu-5",
+  mother_cc_no: "",
+  mother_citizenship_type: "",
+  spouse_name: "",
+  spouse_address: "",
+  spouse_cc_no: "",
+  spouse_citizenship_type: "",
+  citizenship_type: "Descent",
+  issuing_authority_name: "Sample Officer",
+  issuing_authority_designation: "Administrative Officer",
+  issue_date_ad: "2020-05-15",
+};
+
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+function ProgressBar({ used, limit, small }) {
   const percentage = Math.min((used / limit) * 100, 100);
   const color = percentage < 60 ? "bg-green-600" 
               : percentage < 80 ? "bg-yellow-500" 
               : "bg-red-600";
   
   return (
-    <div className="w-24 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+    <div className={`${small ? 'w-20 h-1' : 'w-24 h-1.5'} bg-stone-200 rounded-full overflow-hidden`}>
       <div 
         className={`h-full ${color} transition-all duration-500`} 
         style={{ width: `${percentage}%` }}
@@ -20,40 +47,206 @@ function ProgressBar({ used, limit }) {
   );
 }
 
-// ─── Logout Confirmation Modal ────────────────────────────────────────────────
+// ─── Modals ───────────────────────────────────────────────────────────────────
 function LogoutModal({ show, onCancel, onConfirm }) {
   if (!show) return null;
-  
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4"
-      onClick={onCancel}
-    >
-      <div 
-        className="w-full max-w-sm rounded-sm border-2 border-stone-900 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-        style={{ fontFamily: "'Fraunces', Georgia, serif" }}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-sm border-2 border-stone-900 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
         <h3 className="mb-2 text-lg font-semibold text-stone-900">Sign Out?</h3>
-        <p className="mb-6 text-sm text-stone-600">
-          You will need to sign in again to access your translations.
-        </p>
+        <p className="mb-6 text-sm text-stone-600">You will need to sign in again to access your translations.</p>
         <div className="flex gap-2">
-          <button
-            onClick={onCancel}
-            className="flex-1 rounded-sm border border-stone-300 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 rounded-sm border border-red-700 bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800"
-          >
-            Sign Out
-          </button>
+          <button onClick={onCancel} className="flex-1 rounded-sm border border-stone-300 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 rounded-sm bg-red-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-800">Sign Out</button>
         </div>
       </div>
     </div>
+  );
+}
+
+function NewTranslationModal({ show, onCancel, onConfirm }) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-sm border-2 border-stone-900 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+        <h3 className="mb-2 text-lg font-semibold text-stone-900">Start New Translation?</h3>
+        <p className="mb-6 text-sm text-stone-600">Your current translation will be lost.</p>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 rounded-sm border border-stone-300 bg-stone-50 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 rounded-sm bg-stone-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-stone-700">New Translation</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpgradeModal({ show, onClose }) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-sm border-2 border-stone-900 bg-white p-8 shadow-2xl" onClick={(e) => e.stopPropagation()} style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-xl font-bold text-stone-900">Upgrade to Premium</h3>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-900"><X className="h-5 w-5" /></button>
+        </div>
+        <p className="mb-6 text-sm text-stone-600">You've reached your free limit. Upgrade for unlimited clean PDFs.</p>
+        <div className="mb-6 space-y-3">
+          <div className="flex items-start gap-2"><CheckCircle2 className="h-5 w-5 mt-0.5 text-green-700 flex-shrink-0" /><span className="text-sm">25 clean PDFs per month (no watermark)</span></div>
+          <div className="flex items-start gap-2"><CheckCircle2 className="h-5 w-5 mt-0.5 text-green-700 flex-shrink-0" /><span className="text-sm">Priority support</span></div>
+          <div className="flex items-start gap-2"><CheckCircle2 className="h-5 w-5 mt-0.5 text-green-700 flex-shrink-0" /><span className="text-sm">Translation history (30 days)</span></div>
+        </div>
+        <div className="mb-6 rounded-sm bg-amber-50 border border-amber-200 p-4 text-center">
+          <p className="text-2xl font-bold text-stone-900">NPR 299<span className="text-sm font-normal text-stone-600">/month</span></p>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs text-stone-600 text-center">Pay via eSewa, Khalti, or Bank Transfer</p>
+          <p className="text-xs text-stone-500 text-center">Contact: <a href="mailto:support@citizentranslate.com" className="underline">support@citizentranslate.com</a></p>
+        </div>
+        <button onClick={onClose} className="mt-4 w-full rounded-sm border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100">Maybe Later</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Dropdown ─────────────────────────────────────────────────────────
+function ProfileDropdown({ user, userProfile, onLogout, onUpgrade }) {
+  const [open, setOpen] = useState(false);
+  const isPremium = userProfile?.plan === "premium";
+  const pdfsUsed = userProfile?.pdfsGenerated || 0;
+  const pdfsLimit = userProfile?.pdfsLimit || 5;
+  
+  // Calculate next reset date (1st of next month for simplicity)
+  const getResetDate = () => {
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return next.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 rounded-sm border border-stone-300 bg-stone-50 px-3 py-1.5 text-sm hover:border-stone-900 transition"
+      >
+        {user.photoURL && <img src={user.photoURL} alt="" className="h-6 w-6 rounded-full" />}
+        <span className="hidden sm:inline text-stone-700">{user.displayName?.split(" ")[0]}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-stone-500 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-sm border-2 border-stone-900 bg-white shadow-xl" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+            <div className="border-b border-stone-200 p-4">
+              <p className="font-semibold text-stone-900">{user.displayName}</p>
+              <p className="text-xs text-stone-500">{user.email}</p>
+            </div>
+
+            <div className="border-b border-stone-200 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                {isPremium ? (
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-gradient-to-r from-yellow-400 to-amber-500 px-3 py-1 text-xs font-bold text-stone-900 shadow-md">
+                    <Star className="h-3 w-3 fill-stone-900" /> PRO
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-stone-700 px-3 py-1 text-xs font-bold text-white">
+                    <Zap className="h-3 w-3" /> FREE
+                  </span>
+                )}
+              </div>
+
+              {isPremium && userProfile?.subscriptionEnd && (
+                <p className="mb-3 text-xs text-stone-600">
+                  Valid until: <span className="font-semibold">{new Date(userProfile.subscriptionEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </p>
+              )}
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <ProgressBar used={pdfsUsed} limit={pdfsLimit} small />
+                  <span className="text-xs font-semibold text-stone-700" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    {pdfsUsed}/{pdfsLimit}
+                  </span>
+                </div>
+                <p className="text-[10px] text-stone-500">PDFs remaining</p>
+                {!isPremium && (
+                  <p className="text-[10px] text-stone-400">Resets: {getResetDate()}</p>
+                )}
+              </div>
+
+              {!isPremium && (
+                <button
+                  onClick={() => { setOpen(false); onUpgrade(); }}
+                  className="mt-3 w-full rounded-sm bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-600 transition"
+                >
+                  Upgrade to Pro
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => { setOpen(false); onLogout(); }}
+              className="w-full px-4 py-3 text-left text-sm text-red-700 hover:bg-red-50 transition"
+            >
+              Logout
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Watermark ────────────────────────────────────────────────────────────────
+function Watermark({ show }) {
+  if (!show) return null;
+  return (
+    <div style={{
+      position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+      pointerEvents: "none", zIndex: 10, overflow: "hidden",
+    }}>
+      <span style={{
+        position: "absolute", top: "50%", left: "50%",
+        transform: "translate(-50%, -50%) rotate(-35deg)",
+        fontSize: "32px", fontWeight: "bold",
+        color: "rgba(200, 0, 0, 0.08)",
+        whiteSpace: "nowrap", userSelect: "none",
+        letterSpacing: "8px", fontFamily: "'Times New Roman', serif"
+      }}>
+        FREE VERSION
+      </span>
+    </div>
+  );
+}
+
+// ─── Field Components ─────────────────────────────────────────────────────────
+function Field({ value, path, mono, editMode, updateField }) {
+  if (editMode) {
+    return (
+      <input
+        type="text"
+        value={value || ""}
+        onChange={(e) => updateField(path, e.target.value)}
+        className="w-full border-b border-stone-400 bg-amber-50 px-1 py-0.5 outline-none focus:border-red-700"
+        style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}
+      />
+    );
+  }
+  return <span style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}>{value || "—"}</span>;
+}
+
+function AddressTypeDropdown({ value, onChange, editMode }) {
+  if (!editMode) return <span>{value}:</span>;
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="border-b border-stone-400 bg-amber-50 px-1 py-0.5 outline-none focus:border-red-700 text-sm"
+    >
+      <option value="Sub-Metropolitan">Sub-Metropolitan</option>
+      <option value="Metropolitan">Metropolitan</option>
+      <option value="V.D.C">V.D.C</option>
+    </select>
   );
 }
 
@@ -75,6 +268,10 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showNewTranslationModal, setShowNewTranslationModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Reading document...");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -100,25 +297,18 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  // ─── Login Screen ─────────────────────────────────────────────────────────
+  if (!user && !demoMode) {
     return (
-      <div
-        className="min-h-screen bg-stone-50 flex flex-col items-center justify-center gap-6 px-4"
-        style={{ fontFamily: "'Fraunces', Georgia, serif" }}
-      >
-        <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center gap-6 px-4" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+        <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
         <div className="flex items-center gap-3 mb-2">
           <div className="h-12 w-12 rounded-sm bg-red-700 flex items-center justify-center">
             <FileText className="h-6 w-6 text-stone-50" strokeWidth={2.5} />
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-stone-900">Document Translator</h1>
-            <p className="text-[11px] text-stone-500" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-              NEPALI → ENGLISH
-            </p>
+            <p className="text-[11px] text-stone-500" style={{ fontFamily: "'JetBrains Mono', monospace" }}>NEPALI → ENGLISH</p>
           </div>
         </div>
         <div className="w-full max-w-sm border-2 border-stone-900 bg-white p-8 rounded-sm text-center shadow-sm">
@@ -126,7 +316,7 @@ export default function App() {
           <p className="text-sm text-stone-500 mb-6">Sign in to access the translator</p>
           <button
             onClick={signInWithGoogle}
-            className="w-full flex items-center justify-center gap-3 border-2 border-stone-900 bg-stone-50 px-5 py-3 text-sm font-medium text-stone-900 hover:bg-stone-900 hover:text-stone-50 transition rounded-sm"
+            className="w-full flex items-center justify-center gap-3 border-2 border-stone-900 bg-stone-50 px-5 py-3 text-sm font-medium text-stone-900 hover:bg-stone-900 hover:text-stone-50 transition rounded-sm mb-3"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -136,20 +326,36 @@ export default function App() {
             </svg>
             Continue with Google
           </button>
-          <p className="mt-4 text-[11px] text-stone-400">Free tier includes 5 watermarked PDFs</p>
+          <button
+            onClick={() => { setDemoMode(true); setResult(DEMO_RESULT); setStatus("done"); }}
+            className="w-full rounded-sm border border-stone-300 bg-stone-50 px-5 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100 transition"
+          >
+            Try Demo (no sign-in)
+          </button>
+          <div className="mt-6 space-y-1.5 text-left">
+            <div className="flex items-start gap-2 text-xs text-stone-600">
+              <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-green-700 flex-shrink-0" />
+              <span>We don't store your documents</span>
+            </div>
+            <div className="flex items-start gap-2 text-xs text-stone-600">
+              <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-green-700 flex-shrink-0" />
+              <span>Files deleted immediately after processing</span>
+            </div>
+            <div className="flex items-start gap-2 text-xs text-stone-600">
+              <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-green-700 flex-shrink-0" />
+              <span>Zero data retention</span>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
+  // ─── Handlers ─────────────────────────────────────────────────────────────
+
   const handleFiles = (fileList) => {
-    const valid = Array.from(fileList).filter(
-      (f) => f.type.startsWith("image/") || f.type === "application/pdf"
-    );
-    if (valid.length === 0) {
-      setErrorMsg("Please upload JPG, PNG, or PDF files only.");
-      return;
-    }
+    const valid = Array.from(fileList).filter(f => f.type.startsWith("image/") || f.type === "application/pdf");
+    if (valid.length === 0) { setErrorMsg("Please upload JPG, PNG, or PDF files only."); return; }
     setErrorMsg("");
     setFiles((prev) => [...prev, ...valid].slice(0, 4));
   };
@@ -157,37 +363,42 @@ export default function App() {
   const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const onDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
     else if (e.type === "dragleave") setDragActive(false);
   };
 
   const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files?.[0]) handleFiles(e.dataTransfer.files);
   };
 
   const extractData = async () => {
-    if (files.length === 0) {
-      setErrorMsg("Please upload at least one file.");
-      return;
-    }
-    setStatus("processing");
-    setErrorMsg("");
+    if (files.length === 0) { setErrorMsg("Please upload at least one file."); return; }
+    setStatus("processing"); setErrorMsg("");
+    
+    // Simulate loading stages
+    setLoadingMessage("Reading document...");
+    setTimeout(() => setLoadingMessage("Translating fields..."), 3000);
+    setTimeout(() => setLoadingMessage("Finalizing..."), 10000);
+
     try {
       const formData = new FormData();
       formData.append("documentType", documentType);
       files.forEach((f) => formData.append("files", f));
 
       const base = import.meta.env.VITE_API_URL || "";
-      const token = await auth.currentUser.getIdToken();
+      const headers = {};
+      if (user) {
+        const token = await auth.currentUser.getIdToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${base}/api/extract`, {
         method: "POST",
         body: formData,
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
       });
 
       if (!response.ok) {
@@ -196,22 +407,35 @@ export default function App() {
       }
 
       const data = await response.json();
+      
+      // Check if extraction is completely empty
+      const hasData = data.full_name || data.citizenship_certificate_no || data.father_name;
+      if (!hasData) {
+        setStatus("empty");
+        setErrorMsg("No data could be extracted. The image may be too blurry, damaged, or not a citizenship certificate.");
+        return;
+      }
+
       setResult(data);
       setStatus("done");
-      await incrementScanCount(user.uid);
+      if (user && !demoMode) await incrementScanCount(user.uid);
     } catch (err) {
       console.error(err);
-      setErrorMsg(`Extraction failed: ${err.message}`);
       setStatus("error");
+      setErrorMsg(err.message || "Extraction failed");
     }
   };
 
   const reset = () => {
-    setFiles([]);
-    setResult(null);
-    setStatus("idle");
-    setErrorMsg("");
-    setEditMode(false);
+    if (status === "done" && result) {
+      setShowNewTranslationModal(true);
+    } else {
+      doReset();
+    }
+  };
+
+  const doReset = () => {
+    setFiles([]); setResult(null); setStatus("idle"); setErrorMsg(""); setEditMode(false); setSavedResult(null); setShowNewTranslationModal(false);
   };
 
   const updateField = (path, value) => {
@@ -226,8 +450,13 @@ export default function App() {
   };
 
   const printPDF = async () => {
+    if (demoMode) {
+      alert("Demo mode: Sign in to download PDFs");
+      return;
+    }
+
     if (userProfile?.plan !== "premium" && userProfile?.pdfsGenerated >= userProfile?.pdfsLimit) {
-      setErrorMsg("You've reached your 5 PDF limit. Upgrade to premium for 25 clean PDFs/month.");
+      setShowUpgradeModal(true);
       return;
     }
 
@@ -236,23 +465,41 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const w = window.open(url, "_blank");
     w.onload = () => {
-      setTimeout(() => {
-        w.print();
-        URL.revokeObjectURL(url);
-      }, 400);
+      setTimeout(() => { w.print(); URL.revokeObjectURL(url); }, 400);
     };
 
-    await incrementPDFCount(user.uid);
-    setUserProfile(prev => ({ ...prev, pdfsGenerated: (prev.pdfsGenerated || 0) + 1 }));
+    if (user) {
+      await incrementPDFCount(user.uid);
+      setUserProfile(prev => ({ ...prev, pdfsGenerated: (prev.pdfsGenerated || 0) + 1 }));
+    }
   };
+
+  const openCamera = () => {
+    if (inputRef.current) {
+      inputRef.current.setAttribute("capture", "environment");
+      inputRef.current.click();
+    }
+  };
+
+  const reportIssue = () => {
+    const subject = encodeURIComponent("Translation Issue Report");
+    const body = encodeURIComponent(`
+Certificate No: ${result?.citizenship_certificate_no || 'N/A'}
+Name: ${result?.full_name || 'N/A'}
+
+Issue description:
+[Please describe what went wrong]
+    `);
+    window.location.href = `mailto:support@citizentranslate.com?subject=${subject}&body=${body}`;
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-stone-50" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
-        rel="stylesheet"
-      />
+      <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
+      {/* Header */}
       <header className="border-b-2 border-stone-900 bg-stone-50 px-4 py-4 sm:px-10 sm:py-5">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">
@@ -261,40 +508,14 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-stone-900 sm:text-2xl">Document Translator</h1>
-              <p className="text-[10px] text-stone-600 sm:text-xs" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                NEPALI → ENGLISH
-              </p>
+              <p className="text-[10px] text-stone-600 sm:text-xs" style={{ fontFamily: "'JetBrains Mono', monospace" }}>NEPALI → ENGLISH</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-3">
-              {user.photoURL && (
-                <img src={user.photoURL} alt="" className="h-7 w-7 rounded-full border border-stone-300" />
-              )}
-              <span className="text-sm text-stone-700">{user.displayName?.split(" ")[0]}</span>
-              <span
-                className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                  userProfile?.plan === "premium"
-                    ? "bg-amber-400 text-stone-900"
-                    : "bg-stone-200 text-stone-600"
-                }`}
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                {userProfile?.plan === "premium" ? "PRO" : "FREE"}
-              </span>
-
-              {userProfile?.plan !== "premium" && (
-                <div className="flex items-center gap-2">
-                  <ProgressBar used={userProfile?.pdfsGenerated || 0} limit={userProfile?.pdfsLimit || 5} />
-                  <span className="text-[10px] text-stone-500 whitespace-nowrap"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    {userProfile?.pdfsGenerated || 0}/{userProfile?.pdfsLimit || 5}
-                  </span>
-                </div>
-              )}
-            </div>
-
+            {demoMode && (
+              <span className="hidden sm:inline text-xs text-amber-700 font-medium">Demo Mode</span>
+            )}
             {status === "done" && (
               <button
                 onClick={reset}
@@ -305,13 +526,15 @@ export default function App() {
                 <span className="sm:hidden">New</span>
               </button>
             )}
-
-            <button
-              onClick={() => setShowLogoutModal(true)}
-              className="rounded-sm border border-stone-300 px-3 py-2 text-xs font-medium text-stone-600 hover:border-red-700 hover:text-red-700 transition"
-            >
-              Logout
-            </button>
+            {user && <ProfileDropdown user={user} userProfile={userProfile} onLogout={() => setShowLogoutModal(true)} onUpgrade={() => setShowUpgradeModal(true)} />}
+            {demoMode && (
+              <button
+                onClick={() => { setDemoMode(false); setResult(null); setStatus("idle"); }}
+                className="rounded-sm border border-red-700 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-700 hover:text-white"
+              >
+                Exit Demo
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -320,12 +543,7 @@ export default function App() {
         {status !== "done" && (
           <>
             <section className="mb-6 sm:mb-8">
-              <label
-                className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                Document Type
-              </label>
+              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Document Type</label>
               <div className="relative max-w-md">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -336,10 +554,7 @@ export default function App() {
                 </button>
                 {dropdownOpen && (
                   <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-sm border-2 border-stone-900 bg-stone-50 shadow-lg">
-                    <button
-                      onClick={() => { setDocumentType("Citizenship"); setDropdownOpen(false); }}
-                      className="w-full px-4 py-3 text-left text-base font-medium text-stone-900 hover:bg-amber-100"
-                    >
+                    <button onClick={() => { setDocumentType("Citizenship"); setDropdownOpen(false); }} className="w-full px-4 py-3 text-left text-base font-medium text-stone-900 hover:bg-amber-100">
                       Citizenship
                     </button>
                   </div>
@@ -348,30 +563,13 @@ export default function App() {
             </section>
 
             <section className="mb-6 sm:mb-8">
-              <label
-                className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                Upload Document
-              </label>
+              <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-700" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Upload Document</label>
               <div
-                onDragEnter={onDrag}
-                onDragLeave={onDrag}
-                onDragOver={onDrag}
-                onDrop={onDrop}
+                onDragEnter={onDrag} onDragLeave={onDrag} onDragOver={onDrag} onDrop={onDrop}
                 onClick={() => inputRef.current?.click()}
-                className={`cursor-pointer rounded-sm border-2 border-dashed p-6 text-center transition sm:p-10 ${
-                  dragActive ? "border-red-700 bg-red-50" : "border-stone-400 bg-white hover:border-stone-900 hover:bg-stone-100"
-                }`}
+                className={`cursor-pointer rounded-sm border-2 border-dashed p-6 text-center transition sm:p-10 ${dragActive ? "border-red-700 bg-red-50" : "border-stone-400 bg-white hover:border-stone-900 hover:bg-stone-100"}`}
               >
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  onChange={(e) => handleFiles(e.target.files)}
-                  className="hidden"
-                />
+                <input ref={inputRef} type="file" accept="image/*,application/pdf" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
                 <Upload className="mx-auto mb-3 h-8 w-8 text-stone-500 sm:h-10 sm:w-10" strokeWidth={1.5} />
                 <p className="text-sm font-medium text-stone-900 sm:text-base">
                   Tap to upload, or <span className="underline decoration-red-700 decoration-2 underline-offset-4">drag files</span>
@@ -380,20 +578,25 @@ export default function App() {
                 <p className="mt-1 text-[11px] italic text-stone-500">For best results: clear, well-lit, uncropped</p>
               </div>
 
+              {/* Mobile camera button */}
+              <div className="mt-3 flex gap-2 sm:hidden">
+                <button
+                  onClick={openCamera}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-sm border-2 border-stone-900 bg-stone-50 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-900 hover:text-stone-50"
+                >
+                  <Camera className="h-4 w-4" /> Take Photo
+                </button>
+              </div>
+
               {files.length > 0 && (
                 <div className="mt-4 space-y-2">
                   {files.map((f, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between rounded-sm border border-stone-300 bg-white px-3 py-2 sm:px-4 sm:py-2.5"
-                    >
+                    <div key={i} className="flex items-center justify-between rounded-sm border border-stone-300 bg-white px-3 py-2 sm:px-4 sm:py-2.5">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <FileText className="h-4 w-4 flex-shrink-0 text-stone-600" />
                         <span className="truncate text-sm font-medium text-stone-900">{f.name}</span>
                       </div>
-                      <button onClick={() => removeFile(i)} className="ml-2 text-xs font-medium text-red-700 hover:underline">
-                        Remove
-                      </button>
+                      <button onClick={() => removeFile(i)} className="ml-2 text-xs font-medium text-red-700 hover:underline">Remove</button>
                     </div>
                   ))}
                 </div>
@@ -407,7 +610,7 @@ export default function App() {
                 className="flex w-full items-center justify-center gap-2 rounded-sm bg-stone-900 px-7 py-3.5 text-base font-medium text-stone-50 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
               >
                 {status === "processing" ? (
-                  <><Loader2 className="h-5 w-5 animate-spin" /> Extracting & Translating...</>
+                  <><Loader2 className="h-5 w-5 animate-spin" /> {loadingMessage}</>
                 ) : (
                   <>Generate Translation <span className="ml-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>→</span></>
                 )}
@@ -415,17 +618,41 @@ export default function App() {
             </section>
 
             {errorMsg && (
-              <div className="flex items-start gap-3 rounded-sm border-l-4 border-red-700 bg-red-50 px-4 py-3">
-                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-700" />
-                <p className="text-sm text-red-900">{errorMsg}</p>
+              <div className="rounded-sm border-l-4 border-red-700 bg-red-50 p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-700" />
+                  <p className="text-sm text-red-900">{errorMsg}</p>
+                </div>
+                {status === "error" && (
+                  <div className="flex gap-2">
+                    <button onClick={() => { setStatus("idle"); setErrorMsg(""); }} className="rounded-sm border border-red-700 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                      Try Again
+                    </button>
+                    <button onClick={() => { setFiles([]); setStatus("idle"); setErrorMsg(""); }} className="rounded-sm border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50">
+                      Upload Different File
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {status === "processing" && (
               <div className="mt-6 rounded-sm border border-stone-300 bg-amber-50 px-5 py-4">
-                <p className="text-sm text-stone-800">
-                  Reading your document and translating Devanagari text. This usually takes 10–20 seconds.
-                </p>
+                <p className="text-sm text-stone-800">{loadingMessage} This usually takes 10–20 seconds.</p>
+              </div>
+            )}
+
+            {status === "empty" && (
+              <div className="mt-6 rounded-sm border border-amber-500 bg-amber-50 p-5 text-center">
+                <AlertCircle className="mx-auto mb-3 h-8 w-8 text-amber-700" />
+                <p className="mb-1 text-base font-semibold text-stone-900">No data extracted</p>
+                <p className="mb-4 text-sm text-stone-600">The image may be too blurry, damaged, or not a citizenship certificate.</p>
+                <button
+                  onClick={() => { setFiles([]); setStatus("idle"); setErrorMsg(""); }}
+                  className="rounded-sm bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+                >
+                  Upload Clearer Photo
+                </button>
               </div>
             )}
           </>
@@ -441,7 +668,7 @@ export default function App() {
                   <p className="text-xs text-stone-600">Review and correct any errors before finalizing</p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => {
                     if (!editMode) setSavedResult(JSON.parse(JSON.stringify(result)));
@@ -459,11 +686,15 @@ export default function App() {
                     Cancel Edit
                   </button>
                 )}
-                <button
-                  onClick={printPDF}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-stone-900 px-4 py-2 text-sm font-medium text-stone-50 hover:bg-red-700 sm:flex-initial"
-                >
+                <button onClick={printPDF} className="flex items-center gap-2 rounded-sm bg-stone-900 px-4 py-2 text-sm font-medium text-stone-50 hover:bg-red-700">
                   <Download className="h-4 w-4" /> Save PDF
+                </button>
+                <button
+                  onClick={reportIssue}
+                  className="rounded-sm border border-stone-300 bg-stone-50 px-4 py-2 text-sm font-medium text-stone-600 hover:border-stone-900"
+                  title="Report translation issue"
+                >
+                  <Mail className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -479,11 +710,13 @@ export default function App() {
               birthPlaceType={birthPlaceType}
               setBirthPlaceType={setBirthPlaceType}
               userProfile={userProfile}
+              demoMode={demoMode}
             />
           </div>
         )}
       </main>
 
+      {/* Footer with security badges */}
       <footer className="border-t border-stone-300 px-4 py-6 sm:px-10">
         <div className="mx-auto max-w-6xl">
           <div className="mb-3 flex flex-wrap items-center justify-center gap-4 text-xs text-stone-500">
@@ -514,79 +747,22 @@ export default function App() {
         </div>
       </footer>
 
+      {/* Modals */}
       <LogoutModal 
         show={showLogoutModal}
         onCancel={() => setShowLogoutModal(false)}
-        onConfirm={() => {
-          setShowLogoutModal(false);
-          logOut();
-        }}
+        onConfirm={() => { setShowLogoutModal(false); logOut(); }}
+      />
+      <NewTranslationModal 
+        show={showNewTranslationModal}
+        onCancel={() => setShowNewTranslationModal(false)}
+        onConfirm={doReset}
+      />
+      <UpgradeModal 
+        show={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
       />
     </div>
-  );
-}
-
-// ─── Watermark Component ──────────────────────────────────────────────────────
-function Watermark({ show }) {
-  if (!show) return null;
-  return (
-    <div style={{
-      position: "absolute", top: 0, left: 0,
-      width: "100%", height: "100%",
-      pointerEvents: "none", zIndex: 10,
-      overflow: "hidden",
-    }}>
-      {[...Array(14)].map((_, i) => (
-        <span key={i} style={{
-          position: "absolute",
-          top: `${i * 8 - 5}%`,
-          left: "-20%",
-          width: "140%",
-          textAlign: "center",
-          transform: "rotate(-35deg)",
-          fontSize: "20px",
-          fontWeight: "bold",
-          color: "rgba(180, 0, 0, 0.13)",
-          whiteSpace: "nowrap",
-          userSelect: "none",
-          letterSpacing: "6px",
-        }}>
-          DEMO VERSION • CitizenTranslate.com &nbsp;&nbsp;&nbsp; DEMO VERSION • CitizenTranslate.com
-        </span>
-      ))}
-    </div>
-  );
-}
-
-// ─── Field Component ──────────────────────────────────────────────────────────
-function Field({ value, path, mono, editMode, updateField }) {
-  if (editMode) {
-    return (
-      <input
-        type="text"
-        value={value || ""}
-        onChange={(e) => updateField(path, e.target.value)}
-        className="w-full border-b border-stone-400 bg-amber-50 px-1 py-0.5 outline-none focus:border-red-700"
-        style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}
-      />
-    );
-  }
-  return <span style={mono ? { fontFamily: "'Times New Roman', Times, serif" } : {}}>{value || "—"}</span>;
-}
-
-// ─── Address Type Dropdown ────────────────────────────────────────────────────
-function AddressTypeDropdown({ value, onChange, editMode }) {
-  if (!editMode) return <span>{value}:</span>;
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="border-b border-stone-400 bg-amber-50 px-1 py-0.5 outline-none focus:border-red-700 text-sm"
-    >
-      <option value="Sub-Metropolitan">Sub-Metropolitan</option>
-      <option value="Metropolitan">Metropolitan</option>
-      <option value="V.D.C">V.D.C</option>
-    </select>
   );
 }
 
@@ -596,16 +772,14 @@ function OutputCard({
   birthAddressType, setBirthAddressType,
   permAddressType, setPermAddressType,
   birthPlaceType, setBirthPlaceType,
-  userProfile,
+  userProfile, demoMode
 }) {
   const fieldProps = { editMode, updateField };
+  const showWatermark = demoMode || userProfile?.plan !== "premium";
 
   return (
-    <article
-      className="rounded-sm border-2 border-stone-900 bg-white p-5 sm:p-10"
-      style={{ fontFamily: "'Fraunces', Georgia, serif", position: "relative" }}
-    >
-      <Watermark show={userProfile?.plan !== "premium"} />
+    <article className="rounded-sm border-2 border-stone-900 bg-white p-5 sm:p-10" style={{ fontFamily: "'Fraunces', Georgia, serif", position: "relative" }}>
+      <Watermark show={showWatermark} />
 
       <div className="mb-4 grid grid-cols-[auto_1fr_auto] items-start gap-4">
         <div className="w-44 border border-stone-800 text-[10px] leading-tight">
@@ -627,8 +801,7 @@ function OutputCard({
             <p className="text-sm italic text-stone-600">Government of Nepal</p>
             <p className="text-sm italic text-stone-600">Ministry of Home Affairs</p>
             <h1 className="mt-1 text-lg font-bold tracking-tight text-stone-900 sm:text-xl">
-              District Administration Office,{" "}
-              <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} />
+              District Administration Office, <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} />
             </h1>
             <p className="mt-1 text-base font-semibold italic text-stone-900 underline">NEPALESE CITIZENSHIP CERTIFICATE</p>
           </div>
@@ -636,9 +809,7 @@ function OutputCard({
 
         <div className="flex flex-col items-end gap-2">
           <div className="h-20 w-20 border border-stone-800 p-1"><RandomQR /></div>
-          <div className="flex h-20 w-28 items-center justify-center border border-stone-800 text-[10px] italic text-stone-500">
-            Office Seal
-          </div>
+          <div className="flex h-20 w-28 items-center justify-center border border-stone-800 text-[10px] italic text-stone-500">Office Seal</div>
         </div>
       </div>
 
@@ -654,76 +825,24 @@ function OutputCard({
         </div>
 
         <div className="space-y-2 text-sm">
-          <TwoColRow
-            leftLabel="Name and Surname"
-            leftValue={<Field value={result.full_name} path="full_name" {...fieldProps} />}
-            rightLabel="Sex"
-            rightValue={<Field value={result.sex} path="sex" {...fieldProps} />}
-          />
-          <TwoColRow
-            leftLabel="Place of birth"
-            leftValue={<>District: <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} /></>}
-          />
+          <TwoColRow leftLabel="Name and Surname" leftValue={<Field value={result.full_name} path="full_name" {...fieldProps} />} rightLabel="Sex" rightValue={<Field value={result.sex} path="sex" {...fieldProps} />} />
+          <TwoColRow leftLabel="Place of birth" leftValue={<>District: <Field value={result.birth_place?.district} path="birth_place.district" {...fieldProps} /></>} />
           <TwoColRow
             leftValue={<><AddressTypeDropdown value={birthPlaceType} onChange={setBirthPlaceType} editMode={editMode} /> <Field value={result.birth_place?.sub_metropolitan} path="birth_place.sub_metropolitan" {...fieldProps} /></>}
-            rightLabel="Ward No."
-            rightValue={<Field value={result.birth_place?.ward_no} path="birth_place.ward_no" mono {...fieldProps} />}
+            rightLabel="Ward No." rightValue={<Field value={result.birth_place?.ward_no} path="birth_place.ward_no" mono {...fieldProps} />}
           />
-          <TwoColRow
-            leftLabel="Permanent Resident"
-            leftValue={<>District: <Field value={result.permanent_address?.district} path="permanent_address.district" {...fieldProps} /></>}
-          />
+          <TwoColRow leftLabel="Permanent Resident" leftValue={<>District: <Field value={result.permanent_address?.district} path="permanent_address.district" {...fieldProps} /></>} />
           <TwoColRow
             leftValue={<><AddressTypeDropdown value={permAddressType} onChange={setPermAddressType} editMode={editMode} /> <Field value={result.permanent_address?.sub_metropolitan} path="permanent_address.sub_metropolitan" {...fieldProps} /></>}
-            rightLabel="Ward No."
-            rightValue={<Field value={result.permanent_address?.ward_no} path="permanent_address.ward_no" mono {...fieldProps} />}
+            rightLabel="Ward No." rightValue={<Field value={result.permanent_address?.ward_no} path="permanent_address.ward_no" mono {...fieldProps} />}
           />
-          <TwoColRow
-            leftLabel="Date of birth (A.D.)"
-            leftValue={
-              <>
-                Year: <Field value={result.date_of_birth_ad?.year} path="date_of_birth_ad.year" mono {...fieldProps} />{" "}
-                Month: <Field value={result.date_of_birth_ad?.month} path="date_of_birth_ad.month" mono {...fieldProps} />{" "}
-                Day: <Field value={result.date_of_birth_ad?.day} path="date_of_birth_ad.day" mono {...fieldProps} />
-              </>
-            }
-          />
-          <TwoColRow
-            leftLabel="Father's Name, Surname"
-            leftValue={<Field value={result.father_name} path="father_name" {...fieldProps} />}
-            rightLabel="C.C.No."
-            rightValue={<Field value={result.father_cc_no} path="father_cc_no" mono {...fieldProps} />}
-          />
-          <TwoColRow
-            leftLabel="Address"
-            leftValue={<Field value={result.father_address} path="father_address" {...fieldProps} />}
-            rightLabel="Citizenship Type"
-            rightValue={<Field value={result.father_citizenship_type} path="father_citizenship_type" {...fieldProps} />}
-          />
-          <TwoColRow
-            leftLabel="Mother's Name, Surname"
-            leftValue={<Field value={result.mother_name} path="mother_name" {...fieldProps} />}
-            rightLabel="C.C.No."
-            rightValue={<Field value={result.mother_cc_no} path="mother_cc_no" mono {...fieldProps} />}
-          />
-          <TwoColRow
-            leftLabel="Address"
-            leftValue={<Field value={result.mother_address} path="mother_address" {...fieldProps} />}
-            rightLabel="Citizenship Type"
-            rightValue={<Field value={result.mother_citizenship_type} path="mother_citizenship_type" {...fieldProps} />}
-          />
-          <TwoColRow
-            leftLabel="Husband/Wife's Name, Surname"
-            leftValue={<Field value={result.spouse_name} path="spouse_name" {...fieldProps} />}
-            rightLabel="C.C.No."
-            rightValue={<Field value={result.spouse_cc_no} path="spouse_cc_no" mono {...fieldProps} />}
-          />
-          <TwoColRow
-            leftLabel="Address"
-            leftValue={<Field value={result.spouse_address} path="spouse_address" {...fieldProps} />}
-            rightLabel="Citizenship Type"
-            rightValue={<Field value={result.spouse_citizenship_type} path="spouse_citizenship_type" {...fieldProps} />}
-          />
+          <TwoColRow leftLabel="Date of birth (A.D.)" leftValue={<>Year: <Field value={result.date_of_birth_ad?.year} path="date_of_birth_ad.year" mono {...fieldProps} /> Month: <Field value={result.date_of_birth_ad?.month} path="date_of_birth_ad.month" mono {...fieldProps} /> Day: <Field value={result.date_of_birth_ad?.day} path="date_of_birth_ad.day" mono {...fieldProps} /></>} />
+          <TwoColRow leftLabel="Father's Name, Surname" leftValue={<Field value={result.father_name} path="father_name" {...fieldProps} />} rightLabel="C.C.No." rightValue={<Field value={result.father_cc_no} path="father_cc_no" mono {...fieldProps} />} />
+          <TwoColRow leftLabel="Address" leftValue={<Field value={result.father_address} path="father_address" {...fieldProps} />} rightLabel="Citizenship Type" rightValue={<Field value={result.father_citizenship_type} path="father_citizenship_type" {...fieldProps} />} />
+          <TwoColRow leftLabel="Mother's Name, Surname" leftValue={<Field value={result.mother_name} path="mother_name" {...fieldProps} />} rightLabel="C.C.No." rightValue={<Field value={result.mother_cc_no} path="mother_cc_no" mono {...fieldProps} />} />
+          <TwoColRow leftLabel="Address" leftValue={<Field value={result.mother_address} path="mother_address" {...fieldProps} />} rightLabel="Citizenship Type" rightValue={<Field value={result.mother_citizenship_type} path="mother_citizenship_type" {...fieldProps} />} />
+          <TwoColRow leftLabel="Husband/Wife's Name, Surname" leftValue={<Field value={result.spouse_name} path="spouse_name" {...fieldProps} />} rightLabel="C.C.No." rightValue={<Field value={result.spouse_cc_no} path="spouse_cc_no" mono {...fieldProps} />} />
+          <TwoColRow leftLabel="Address" leftValue={<Field value={result.spouse_address} path="spouse_address" {...fieldProps} />} rightLabel="Citizenship Type" rightValue={<Field value={result.spouse_citizenship_type} path="spouse_citizenship_type" {...fieldProps} />} />
         </div>
       </div>
 
@@ -733,23 +852,15 @@ function OutputCard({
           <div className="flex items-baseline gap-3 flex-wrap">
             <span className="font-semibold whitespace-nowrap">Citizenship Certificate No.:</span>
             <Field value={result.citizenship_certificate_no} path="citizenship_certificate_no" mono {...fieldProps} />
-            <span className="ml-auto whitespace-nowrap">
-              <span className="font-semibold">Sex:</span> <Field value={result.sex} path="sex" {...fieldProps} />
-            </span>
+            <span className="ml-auto whitespace-nowrap"><span className="font-semibold">Sex:</span> <Field value={result.sex} path="sex" {...fieldProps} /></span>
           </div>
           <div className="grid grid-cols-[160px_1fr] items-baseline gap-3">
             <span className="font-semibold">Full Name:</span>
-            <span className="font-bold uppercase tracking-wide">
-              <Field value={result.full_name} path="full_name" {...fieldProps} />
-            </span>
+            <span className="font-bold uppercase tracking-wide"><Field value={result.full_name} path="full_name" {...fieldProps} /></span>
           </div>
           <div className="grid grid-cols-[160px_1fr] items-baseline gap-3">
             <span className="font-semibold">Date of Birth (AD):</span>
-            <span>
-              Year: <Field value={result.date_of_birth_ad?.year} path="date_of_birth_ad.year" mono {...fieldProps} />{"  "}
-              Month: <Field value={result.date_of_birth_ad?.month} path="date_of_birth_ad.month" mono {...fieldProps} />{"  "}
-              Day: <Field value={result.date_of_birth_ad?.day} path="date_of_birth_ad.day" mono {...fieldProps} />
-            </span>
+            <span>Year: <Field value={result.date_of_birth_ad?.year} path="date_of_birth_ad.year" mono {...fieldProps} /> Month: <Field value={result.date_of_birth_ad?.month} path="date_of_birth_ad.month" mono {...fieldProps} /> Day: <Field value={result.date_of_birth_ad?.day} path="date_of_birth_ad.day" mono {...fieldProps} /></span>
           </div>
           <div className="grid grid-cols-[160px_1fr_auto] items-baseline gap-3">
             <span className="font-semibold">Birth Place:</span>
@@ -808,26 +919,21 @@ function OutputCard({
   );
 }
 
-// ─── RandomQR ─────────────────────────────────────────────────────────────────
+// ─── Helper Components ────────────────────────────────────────────────────────
 function RandomQR() {
-  const size = 21;
-  const seed = 1337;
+  const size = 21; const seed = 1337;
   const rng = (i) => { const x = Math.sin(seed + i) * 10000; return x - Math.floor(x); };
   const cells = [];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const inTL = x < 7 && y < 7;
-      const inTR = x >= size - 7 && y < 7;
-      const inBL = x < 7 && y >= size - 7;
+      const inTL = x < 7 && y < 7, inTR = x >= size - 7 && y < 7, inBL = x < 7 && y >= size - 7;
       const inFinder = inTL || inTR || inBL;
       let filled;
       if (inFinder) {
         const fx = inTL ? x : inTR ? x - (size - 7) : x;
         const fy = inTL ? y : inBL ? y - (size - 7) : y;
         filled = (fx === 0 || fx === 6 || fy === 0 || fy === 6) || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
-      } else {
-        filled = rng(y * size + x) > 0.5;
-      }
+      } else { filled = rng(y * size + x) > 0.5; }
       if (filled) cells.push(<rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />);
     }
   }
@@ -839,7 +945,6 @@ function RandomQR() {
   );
 }
 
-// ─── TwoColRow ────────────────────────────────────────────────────────────────
 function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   return (
     <div className="grid grid-cols-[1fr_auto] items-baseline gap-4 border-b border-dotted border-stone-300 pb-1.5">
@@ -857,7 +962,7 @@ function TwoColRow({ leftLabel, leftValue, rightLabel, rightValue }) {
   );
 }
 
-// ─── buildOutputHTML ──────────────────────────────────────────────────────────
+// ─── PDF Builder ──────────────────────────────────────────────────────────────
 function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrType = "Sub-Metropolitan", permAddrType = "Sub-Metropolitan", userPlan = "free") {
   const val = (v) => (v && v !== "" ? v : "—");
   const qrSvg = () => {
@@ -880,12 +985,9 @@ function buildOutputHTML(r, birthPlaceAddrType = "Sub-Metropolitan", birthAddrTy
     return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${size}" height="${size}" fill="white"/><g fill="#111">${rects}</g></svg>`;
   };
 
-  // Watermark HTML (conditional based on plan)
   const watermarkHTML = userPlan !== "premium" ? `
-<div class="watermark-wrap">
-  ${[0, 13, 26, 39, 52, 65, 78, 91].map(top =>
-    `<div class="watermark-line" style="top:${top}%">DEMO VERSION &bull; CitizenTranslate.com &nbsp;&nbsp;&nbsp; DEMO VERSION &bull; CitizenTranslate.com</div>`
-  ).join("")}
+<div style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;overflow:hidden;">
+  <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:32px;font-weight:bold;color:rgba(200,0,0,0.08);white-space:nowrap;letter-spacing:8px;font-family:'Times New Roman',serif;">FREE VERSION</span>
 </div>` : '';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Citizenship Translation — ${val(r.citizenship_certificate_no)}</title>
@@ -934,8 +1036,6 @@ body { font-family: 'Times New Roman', Times, serif; color: #111; max-width: 820
 .auth p { margin: 3px 0; }
 .auth .underline { text-decoration: underline; font-style: italic; }
 .footer-note { margin-top: 8px; padding-top: 6px; border-top: 1px solid #bbb; text-align: center; font-style: italic; color: #666; font-size: 11px; page-break-inside: avoid; page-break-before: avoid; }
-.watermark-wrap { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden; }
-.watermark-line { position: absolute; left: -10%; width: 120%; text-align: center; transform: rotate(-35deg); font-size: 22px; font-weight: bold; color: rgba(180,0,0,0.11); white-space: nowrap; letter-spacing: 6px; font-family: 'Times New Roman', serif; }
 .summary-box { border: 1px solid #111; padding: 10px 14px; margin-top: 14px; font-size: 12px; }
 .summary-box .title-line { font-weight: 600; margin-bottom: 8px; }
 .summary-box .srow { display: grid; grid-template-columns: 160px 1fr auto; gap: 10px; padding: 2px 0; align-items: baseline; }
